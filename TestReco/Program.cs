@@ -8,9 +8,11 @@ namespace TestReco
     {
         static void Main(string[] args)
         {
+            Console.WriteLine(Environment.CurrentDirectory);
+            Console.WriteLine(AppDomain.CurrentDomain.BaseDirectory);
             RecoModel reco = new();
-            var training = @"C:\Users\AIdan\Desktop\test\TestReco\TestReco\Data\ratings_train.csv";
-            var test = @"C:\Users\AIdan\Desktop\test\TestReco\TestReco\Data\ratings_test.csv";
+            var training =  Environment.CurrentDirectory +  @"\Data\ratings_train.csv";
+            var test = Environment.CurrentDirectory +  @"\Data\ratings_test.csv";
             if (!File.Exists(training) && !File.Exists(test))
             {
                 reco.SplitData();
@@ -22,8 +24,8 @@ namespace TestReco
                 reco.Save();
                 reco.Evaluate();
                 reco.PrintMetrics();
-
             }
+
             InputModel input = new();
 
             Console.WriteLine("Enter UserId");
@@ -34,8 +36,6 @@ namespace TestReco
 
             reco.Predict(input);
             reco.PrintPredictions();
-
-
         }
     }
 }

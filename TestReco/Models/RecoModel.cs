@@ -27,9 +27,9 @@ namespace TestReco.Models
 
         private OutputModel _results;
 
-        private static string WholeTrainingDataPath = @"C:\Users\AIdan\Desktop\test\TestReco\TestReco\Data\ratings.csv";
-        private static string SplitTrainingDataPath = @"C:\Users\AIdan\Desktop\test\TestReco\TestReco\Data\ratings_train.csv";
-        private static string TestDataPath = @"C:\Users\AIdan\Desktop\test\TestReco\TestReco\Data\ratings_test.csv";
+        private static string WholeTrainingDataPath = Environment.CurrentDirectory +  @"\Data\ratings.csv";
+        private static string SplitTrainingDataPath = Environment.CurrentDirectory +  @"\Data\ratings_train.csv";
+        private static string TestDataPath = Environment.CurrentDirectory +  @"\Data\ratings_test.csv";
         private static string ModelName = @"model.zip";
 
 
