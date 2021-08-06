@@ -10,6 +10,8 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.ML.Trainers;
 using Microsoft.ML.Transforms;
@@ -136,9 +138,21 @@ namespace TestReco.Models
                 .Append(_mlContext.Transforms.Concatenate("Features", featureColumnNames.ToArray()))
                 .Append(_mlContext.BinaryClassification.Trainers.FieldAwareFactorizationMachine(options));
 
-            _model = pipeline.Fit(_allData);
             Console.WriteLine("Training");
-            Console.WriteLine();
+
+            _model = pipeline.Fit(_allData);
+
+            var metrics = _mlContext.BinaryClassification.CrossValidate(_allData,
+                pipeline, 5, _labelColumn);
+
+            var jsonOptions = new JsonSerializerOptions()
+            {
+                ReferenceHandler = ReferenceHandler.Preserve
+            };
+            foreach (var metric in metrics)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(metric.Metrics));
+            }
         }
 
 
@@ -182,7 +196,9 @@ namespace TestReco.Models
             for (var i = 0; i < record.Table.Columns.Count; i++)
             {
                 var column = record.Table.Columns[i];
-                var property = _generatedType.GetProperty(column.ColumnName);
+                if (column.ColumnName == _labelColumn)
+                    continue;
+                var property = _generatedType.GetField(column.ColumnName);
                 property?.SetValue(data, record[column.ColumnName]);
             }
 

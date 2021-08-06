@@ -23,7 +23,7 @@ namespace TestReco
             {
                 new("userId", typeof(int)),
                 new("movieId", typeof(int)),
-                new("rating", typeof(double)),
+                //new("rating", typeof(double)),
                 new("label", typeof(bool))
             };
 
@@ -35,6 +35,15 @@ namespace TestReco
             var data = File.ReadAllLines(training)
                 .Skip(1)
                 .Select(x => x.Split(','))
+                .Select(x => new
+                {
+                    userId = int.Parse(x[0]),
+                    movieId = int.Parse(x[1]),
+                    rating = double.Parse(x[2]),
+                    label = double.Parse(x[2]) > 3,
+                    timestamp = int.Parse(x[3])
+                })
+                .OrderBy(x => x.timestamp)
                 .ToList();
 
         
@@ -46,10 +55,10 @@ namespace TestReco
                     var row = i < data.Count * 0.9
                         ? trainingTable.NewRow()
                         : testTable.NewRow();
-                    row["userId"] = int.Parse(record[0]);
-                    row["movieId"] = int.Parse(record[1]);
-                    row["rating"] = double.Parse(record[2]);
-                    row["label"] = double.Parse(record[2]) > 3;
+                    row["userId"] = record.userId;
+                    row["movieId"] = record.movieId;
+                    //row["rating"] = record.rating;
+                    row["label"] = record.label;
                     if (i < data.Count * 0.9)
                         trainingTable.Rows.Add(row);
                     else
@@ -61,7 +70,7 @@ namespace TestReco
                     throw;
                 }
             }
-            
+
             Console.WriteLine(trainingTable.Rows.Count);
             Console.WriteLine(testTable.Rows.Count);
 
@@ -77,11 +86,11 @@ namespace TestReco
             var input = trainingTable.NewRow();
 
             Console.WriteLine("Enter UserId");
-            input["userId"] = Console.ReadLine();
+            input["userId"] = int.Parse(Console.ReadLine());
 
             Console.WriteLine("Enter MovieId");
-            input["movieId"] = Console.ReadLine();
-
+            input["movieId"] = int.Parse(Console.ReadLine());
+            
             reco.Predict(input);
             reco.PrintPredictions();
         }
