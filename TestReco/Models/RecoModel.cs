@@ -30,7 +30,7 @@ namespace TestReco.Models
         private static string WholeTrainingDataPath = Environment.CurrentDirectory +  @"\Data\ratings.csv";
         private static string SplitTrainingDataPath = Environment.CurrentDirectory +  @"\Data\ratings_train.csv";
         private static string TestDataPath = Environment.CurrentDirectory +  @"\Data\ratings_test.csv";
-        private static string ModelName = @"model.zip";
+        private static string ModelPath = Environment.CurrentDirectory +  @"\Data\model.zip";
 
 
 
@@ -66,7 +66,7 @@ namespace TestReco.Models
             {
 
                 Shuffle = false,
-                NumberOfIterations = 5000,
+                NumberOfIterations = 100,
                 LatentDimension = 10,
                 LearningRate = .001f,
             };
@@ -131,10 +131,8 @@ namespace TestReco.Models
         {
             Console.WriteLine("Saving Model");
             Console.WriteLine();
-            var storageFolder = ApplicationData.Current.LocalFolder;
-            string modelPath = Path.Combine(storageFolder.Path, ModelName);
 
-            _mlContext.Model.Save(_model, inputSchema: null, filePath: modelPath);
+            _mlContext.Model.Save(_model, inputSchema: null, filePath: ModelPath);
         }
 
         public void PrintMetrics()

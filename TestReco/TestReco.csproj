@@ -12,7 +12,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.ML" Version="1.6.0" />
     <PackageReference Include="Microsoft.ML.Recommender" Version="0.18.0" />
-    <PackageReference Include="Uno.UI" Version="3.9.1" />
   </ItemGroup>
 
 </Project>
