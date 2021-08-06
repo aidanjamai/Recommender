@@ -46,7 +46,7 @@ namespace TestReco.Models
                {
                    UserId = x[0],
                    MovieId = x[1],
-                   Label = int.Parse(x[2]) > _ratingTreshold
+                   Label = bool.Parse(x[2])
 
                });
 
@@ -66,9 +66,9 @@ namespace TestReco.Models
             {
 
                 Shuffle = false,
-                NumberOfIterations = 50,
-                LatentDimension = 7,
-                LearningRate = .01f,
+                NumberOfIterations = 5000,
+                LatentDimension = 10,
+                LearningRate = .001f,
             };
 
             var pipeline = _mlContext.Transforms.Categorical.OneHotEncoding("UserIdOneHot", "UserId")
@@ -160,16 +160,17 @@ namespace TestReco.Models
             new_dataset[0] = dataset[0];
             for (int i = 1; i < dataset.Length; i++)
             {
-                string line = dataset[i];
-                string[] lineSplit = line.Split(',');
-                double rating = Double.Parse(lineSplit[2]);
-                rating = rating > _ratingTreshold ? 1 : 0;
+                var line = dataset[i];
+                var lineSplit = line.Split(',');
+                
+                var rating = double.Parse(lineSplit[2]) > _ratingTreshold;
+                
                 lineSplit[2] = rating.ToString();
-                string new_line = string.Join(',', lineSplit);
+                var new_line = string.Join(',', lineSplit);
                 new_dataset[i] = new_line;
             }
             dataset = new_dataset;
-            int numLines = dataset.Length;
+            var numLines = dataset.Length;
             var body = dataset.Skip(1);
             var sorted = body.Select(line => new { SortKey = Int32.Parse(line.Split(',')[3]), Line = line })
                              .OrderBy(x => x.SortKey)
