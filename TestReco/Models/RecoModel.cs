@@ -52,10 +52,9 @@ namespace TestReco.Models
         {
             _allData = ProcessDataTable(_dataTable);
         }
-        
+
         private IDataView ProcessDataTable(DataTable table)
         {
-            
             var listType = typeof(List<>).MakeGenericType(_generatedType);
 
             var list = Activator.CreateInstance(listType);
@@ -68,7 +67,12 @@ namespace TestReco.Models
                 {
                     var column = table.Columns[j];
                     var property = _generatedType.GetField(column.ColumnName);
-                    property?.SetValue(record, row[column.ColumnName]);
+                    var value = row[column.ColumnName];
+                    if (value is DBNull) continue;
+                    if (value is Guid)
+                        property.SetValue(record, value.ToString());
+                    else
+                        property.SetValue(record, value);
                 }
 
                 listType
@@ -77,7 +81,7 @@ namespace TestReco.Models
             }
 
             var schemaDefinition = SchemaDefinition.Create(_generatedType);
-            
+
             return typeof(DataOperationsCatalog)
                 .GetMethods()
                 .First(x => x.Name == nameof(MLContext.Data.LoadFromEnumerable) && x.GetParameters()[1].IsOptional)
@@ -88,17 +92,20 @@ namespace TestReco.Models
                     schemaDefinition
                 }) as IDataView;
         }
-        
+
         private Type GenerateTypeFromDataTable(DataTable table)
         {
             var assemblyName = new AssemblyName(Assembly.GetAssembly(typeof(RecoModel))?.FullName ?? "" + "Dynamic");
             var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
-            var module = assemblyBuilder.DefineDynamicModule(assemblyName.Name +".dll");
+            var module = assemblyBuilder.DefineDynamicModule(assemblyName.Name + ".dll");
             var typeBuilder = module.DefineType("DynamicInputModel", TypeAttributes.Public);
             for (var i = 0; i < table.Columns.Count; i++)
             {
                 var column = table.Columns[i];
-                typeBuilder.DefineField(column.ColumnName, column.DataType, FieldAttributes.Public);
+                var columnType = column.DataType == typeof(Guid) 
+                    ? typeof(string) 
+                    : column.DataType;
+                typeBuilder.DefineField(column.ColumnName, columnType, FieldAttributes.Public);
             }
 
             return typeBuilder.CreateType();
@@ -117,7 +124,7 @@ namespace TestReco.Models
                 LabelColumnName = _labelColumn,
                 FeatureColumnName = "Features"
             };
-            
+
             IEstimator<ITransformer> pipeline = null;
             var featureColumnNames = new List<string>();
             for (var i = 0; i < _dataTable.Columns.Count; i++)
@@ -129,7 +136,7 @@ namespace TestReco.Models
                 featureColumnNames.Add(featureColumnName);
                 var estimator = _mlContext.Transforms.Categorical.OneHotEncoding(featureColumnName, columnName);
                 if (i == 0)
-                    pipeline = estimator;          
+                    pipeline = estimator;
                 else
                     pipeline = pipeline.Append(estimator);
             }
@@ -142,17 +149,17 @@ namespace TestReco.Models
 
             _model = pipeline.Fit(_allData);
 
-            var metrics = _mlContext.BinaryClassification.CrossValidate(_allData,
-                pipeline, 5, _labelColumn);
-
-            var jsonOptions = new JsonSerializerOptions()
-            {
-                ReferenceHandler = ReferenceHandler.Preserve
-            };
-            foreach (var metric in metrics)
-            {
-                Console.WriteLine(JsonSerializer.Serialize(metric.Metrics));
-            }
+            //var metrics = _mlContext.BinaryClassification.CrossValidate(_allData,
+            //    pipeline, 5, _labelColumn);
+            //
+            //var jsonOptions = new JsonSerializerOptions()
+            //{
+            //    ReferenceHandler = ReferenceHandler.Preserve
+            //};
+            //foreach (var metric in metrics)
+            //{
+            //    Console.WriteLine(JsonSerializer.Serialize(metric.Metrics));
+            //}
         }
 
 
@@ -181,7 +188,8 @@ namespace TestReco.Models
 
             var engine = typeof(ModelOperationsCatalog)
                 .GetMethods()
-                .First(x => x.Name == nameof(ModelOperationsCatalog.CreatePredictionEngine) && x.GetParameters()[1].IsOptional)
+                .First(x => x.Name == nameof(ModelOperationsCatalog.CreatePredictionEngine) &&
+                            x.GetParameters()[1].IsOptional)
                 .MakeGenericMethod(_generatedType, typeof(OutputModel))
                 .Invoke(_mlContext.Model, new object[]
                 {
@@ -190,34 +198,39 @@ namespace TestReco.Models
                     null,
                     null
                 });
-            
+
             var data = Activator.CreateInstance(_generatedType);
-            
+
             for (var i = 0; i < record.Table.Columns.Count; i++)
             {
                 var column = record.Table.Columns[i];
                 if (column.ColumnName == _labelColumn)
                     continue;
                 var property = _generatedType.GetField(column.ColumnName);
-                property?.SetValue(data, record[column.ColumnName]);
+                var value = record[column.ColumnName];
+                if (value is DBNull)
+                    continue;
+                property?.SetValue(data, value is Guid
+                    ? value.ToString()
+                    : value);
             }
 
             _results = engine.GetType()
                 .GetMethods()
                 .First(x => x.Name == "Predict" && x.ReturnType == typeof(OutputModel)).Invoke(engine, new[]
-            {
-                data
-            }) as OutputModel;
+                {
+                    data
+                }) as OutputModel;
 
             return _results;
         }
 
-        public void Save()
+        public void Save(Stream stream)
         {
             Console.WriteLine("Saving Model");
             Console.WriteLine();
 
-            _mlContext.Model.Save(_model, inputSchema: _allData.Schema, filePath: ModelPath);
+            _mlContext.Model.Save(_model, inputSchema: _allData.Schema, stream);
         }
 
         public void PrintMetrics()
@@ -235,75 +248,9 @@ namespace TestReco.Models
             Console.WriteLine();
         }
 
-        public void SplitData()
-        {
-            Console.WriteLine("Splitting training data into test data and train data");
-            string[] dataset = File.ReadAllLines(WholeTrainingDataPath);
-            string[] new_dataset = new string[dataset.Length];
-            new_dataset[0] = dataset[0];
-            for (int i = 1; i < dataset.Length; i++)
-            {
-                var line = dataset[i];
-                var lineSplit = line.Split(',');
-
-                var rating = double.Parse(lineSplit[2]) > _ratingTreshold;
-
-                lineSplit[2] = rating.ToString();
-                var new_line = string.Join(',', lineSplit);
-                new_dataset[i] = new_line;
-            }
-
-            dataset = new_dataset;
-            var numLines = dataset.Length;
-            var body = dataset.Skip(1);
-            var sorted = body.Select(line => new {SortKey = Int32.Parse(line.Split(',')[3]), Line = line})
-                .OrderBy(x => x.SortKey)
-                .Select(x => x.Line);
-            File.WriteAllLines(SplitTrainingDataPath, dataset.Take(1).Concat(sorted.Take((int) (numLines * 0.9))));
-            File.WriteAllLines(TestDataPath, dataset.Take(1).Concat(sorted.TakeLast((int) (numLines * 0.1))));
-        }
-
         public static float Sigmoid(float x)
         {
             return (float) (100 / (1 + Math.Exp(-x)));
         }
-
-        private static readonly Dictionary<Type, DbType> TypeMap = new Dictionary<Type, DbType>()
-        {
-            {typeof(byte), DbType.Byte},
-            {typeof(sbyte), DbType.SByte},
-            {typeof(short), DbType.Int16},
-            {typeof(ushort), DbType.UInt16},
-            {typeof(int), DbType.Int32},
-            {typeof(uint), DbType.UInt32},
-            {typeof(long), DbType.Int64},
-            {typeof(ulong), DbType.UInt64},
-            {typeof(float), DbType.Single},
-            {typeof(double), DbType.Double},
-            {typeof(decimal), DbType.Decimal},
-            {typeof(bool), DbType.Boolean},
-            {typeof(string), DbType.String},
-            {typeof(char), DbType.StringFixedLength},
-            {typeof(Guid), DbType.Guid},
-            {typeof(DateTime), DbType.DateTime},
-            {typeof(DateTimeOffset), DbType.DateTimeOffset},
-            {typeof(byte[]), DbType.Binary},
-            {typeof(byte?), DbType.Byte},
-            {typeof(sbyte?), DbType.SByte},
-            {typeof(short?), DbType.Int16},
-            {typeof(ushort?), DbType.UInt16},
-            {typeof(int?), DbType.Int32},
-            {typeof(uint?), DbType.UInt32},
-            {typeof(long?), DbType.Int64},
-            {typeof(ulong?), DbType.UInt64},
-            {typeof(float?), DbType.Single},
-            {typeof(double?), DbType.Double},
-            {typeof(decimal?), DbType.Decimal},
-            {typeof(bool?), DbType.Boolean},
-            {typeof(char?), DbType.StringFixedLength},
-            {typeof(Guid?), DbType.Guid},
-            {typeof(DateTime?), DbType.DateTime},
-            {typeof(DateTimeOffset?), DbType.DateTimeOffset}
-        };
     }
 }

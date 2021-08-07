@@ -4,6 +4,7 @@ using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Microsoft.ML.Data;
 using TestReco.Models;
 
@@ -11,13 +12,67 @@ namespace TestReco
 {
     class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             Console.WriteLine(Environment.CurrentDirectory);
             Console.WriteLine(AppDomain.CurrentDomain.BaseDirectory);
 
+            var sqlPath = Environment.CurrentDirectory + @"\Data\Query.sql";
+
+            var sql = await File.ReadAllTextAsync(sqlPath);
+
+            await using var connection = new SqlConnection(@"data source=192.168.1.164\SplendidCRM;initial catalog=SplendidCRM6_CorporateData;persist security info=True;packet size=4096;user id=sa;password=SplendidCRM2005");
+            await using var command = new SqlCommand(sql + "select distinct top 500 * from AIQuery order by ID", connection);
+            await connection.OpenAsync();
+
+            using var adapter = new SqlDataAdapter(command);
+            
+            
+            var trainingTable = new DataTable();
+            adapter.Fill(trainingTable);
+            await connection.CloseAsync();
+
+            var testTable = trainingTable.Clone();
+
+            var breakpoint = (int) (trainingTable.Rows.Count * 0.9);
+            for (var i = trainingTable.Rows.Count - 1; i >= breakpoint; i--)
+            {
+                var row = testTable.NewRow();
+                row.ItemArray = trainingTable.Rows[i].ItemArray;
+                testTable.Rows.Add(row);
+                trainingTable.Rows.Remove(trainingTable.Rows[i]);
+            }
+            
+            
+
+            Console.WriteLine(trainingTable.Rows.Count);
+            Console.WriteLine(testTable.Rows.Count);
+
+
+            RecoModel reco = new(trainingTable, "GOOD");
+
+            reco.LoadData();
+            reco.Build();
+
+            var fileStream = File.Create(Environment.CurrentDirectory + @"\Data\model.zip");
+            reco.Save(fileStream);
+            
+            reco.Evaluate(testTable);
+            reco.PrintMetrics();
+
+            //var input = trainingTable.NewRow();
+            //
+            //Console.WriteLine("Enter UserId");
+            //input["userId"] = int.Parse(Console.ReadLine());
+            //
+            //Console.WriteLine("Enter MovieId");
+            //input["movieId"] = int.Parse(Console.ReadLine());
+            
+            reco.Predict(testTable.Rows[0]);
+            reco.PrintPredictions();
+        }
+        private static void LoadTestData(DataTable trainingTable, out DataTable testTable) {
             var training = Environment.CurrentDirectory + @"\Data\ratings.csv";
-            var test = Environment.CurrentDirectory + @"\Data\ratings_test.csv";
 
             var columns = new DataColumn[]
             {
@@ -27,10 +82,9 @@ namespace TestReco
                 new("label", typeof(bool))
             };
 
-            var trainingTable = new DataTable();
             trainingTable.Columns.AddRange(columns);
 
-            var testTable = trainingTable.Clone();
+            testTable = trainingTable.Clone();
 
             var data = File.ReadAllLines(training)
                 .Skip(1)
@@ -70,29 +124,6 @@ namespace TestReco
                     throw;
                 }
             }
-
-            Console.WriteLine(trainingTable.Rows.Count);
-            Console.WriteLine(testTable.Rows.Count);
-
-
-            RecoModel reco = new(trainingTable, "label");
-
-            reco.LoadData();
-            reco.Build();
-            reco.Save();
-            reco.Evaluate(testTable);
-            reco.PrintMetrics();
-
-            var input = trainingTable.NewRow();
-
-            Console.WriteLine("Enter UserId");
-            input["userId"] = int.Parse(Console.ReadLine());
-
-            Console.WriteLine("Enter MovieId");
-            input["movieId"] = int.Parse(Console.ReadLine());
-            
-            reco.Predict(input);
-            reco.PrintPredictions();
         }
     }
 }
